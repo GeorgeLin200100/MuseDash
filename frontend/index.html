@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MuseDash 前端</title>
+  <style>
+    :root {
+      --accent: #ff6b9b;
+      --accent-2: #5ac8fa;
+      --panel-bg: rgba(13, 16, 26, 0.75);
+      --text-main: #f4f6fb;
+      --text-sub: #c8cede;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text-main);
+      background: #0b0d12;
+    }
+    .main {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    .bg {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(8,10,18,0.65) 0%, rgba(8,10,18,0.2) 100%),
+        url("assets/bg.png") center/cover no-repeat;
+      filter: brightness(0.7);
+      z-index: -2;
+    }
+    .scrim {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 20% 20%, rgba(255,107,155,0.25), transparent 35%),
+                  radial-gradient(circle at 80% 60%, rgba(90,200,250,0.25), transparent 30%);
+      z-index: -1;
+    }
+    .content {
+      position: relative;
+      min-height: 100vh;
+      padding: 48px 36px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .start-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      backdrop-filter: blur(2px);
+      background: rgba(8, 10, 18, 0.45);
+      cursor: pointer;
+      transition: opacity 0.3s ease;
+      z-index: 10;
+    }
+    .start-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .start-title {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .start-sub {
+      margin-top: 12px;
+      font-size: 16px;
+      color: var(--text-sub);
+    }
+    .mode-bar {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: auto;
+      padding-bottom: 12px;
+    }
+    .mode-bar.hidden { display: none; }
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #0b0d12;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+      box-shadow: 0 10px 30px rgba(255,107,155,0.25);
+    }
+    .btn.secondary {
+      background: var(--accent-2);
+      box-shadow: 0 10px 30px rgba(90,200,250,0.22);
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-1px) scale(1.01); }
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 18px;
+      backdrop-filter: blur(6px);
+    }
+    .panel.hidden { display: none; }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .panel-title { font-size: 18px; font-weight: 700; }
+    .status { color: var(--text-sub); font-size: 14px; }
+    .track-list {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 220px;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 6px 2px 12px;
+    }
+    .track-card {
+      position: relative;
+      padding: 14px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .track-card:hover {
+      transform: scale(1.06);
+      border-color: rgba(255,255,255,0.2);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.25);
+    }
+    .track-card.selected {
+      outline: 2px solid var(--accent);
+      box-shadow: 0 12px 26px rgba(255,107,155,0.3);
+    }
+    .track-name { font-size: 16px; font-weight: 700; }
+    .track-meta { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
+    .preview {
+      margin-top: 10px;
+      padding: 14px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      border: 1px dashed rgba(255,255,255,0.08);
+    }
+    .summary-box {
+      margin-top: 10px;
+      padding: 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      color: var(--text-sub);
+      font-size: 13px;
+      white-space: pre-wrap;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .preview-meta { font-size: 14px; color: var(--text-sub); }
+    .preview-images {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .preview-images img, .placeholder-box {
+      width: 100%;
+      height: 120px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(255,107,155,0.18), rgba(90,200,250,0.18));
+      border: 1px solid rgba(255,255,255,0.08);
+      object-fit: cover;
+    }
+    .placeholder-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-sub);
+      font-size: 13px;
+    }
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(8,10,18,0.82);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text-main);
+      font-size: 14px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .toast.show { opacity: 1; }
+    @media (max-width: 720px) {
+      .content { padding: 32px 18px 20px; }
+      .track-list { grid-auto-columns: 170px; }
+      .mode-bar { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="main">
+    <div class="bg"></div>
+    <div class="scrim"></div>
+    <div class="content">
+      <div id="startOverlay" class="start-overlay">
+        <div class="start-title">MuseDash 前端</div>
+        <div class="start-sub">点击任意位置开始游戏</div>
+      </div>
+
+      <div id="normalPanel" class="panel hidden">
+        <div class="panel-header">
+          <div class="panel-title">普通模式 · 轮盘选曲</div>
+          <div id="normalStatus" class="status">等待加载谱面...</div>
+        </div>
+        <div id="trackList" class="track-list"></div>
+        <div class="preview">
+          <div id="previewMeta" class="preview-meta">将鼠标悬停在曲目卡片上即可放大并预览。</div>
+          <div id="previewImages" class="preview-images"></div>
+          <pre id="previewData" class="summary-box">等待 chart_analysis 输出 summary JSON</pre>
+          <div id="normalActions" class="action-row" style="display:none;">
+            <button id="btn-select-normal" class="btn">写入 BPM & ROM</button>
+            <button id="btn-open-quartus" class="btn secondary">打开 Quartus（MuseDash.qsf）</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="randomPanel" class="panel hidden">
+        <div class="panel-header">
+          <div class="panel-title">随机模式</div>
+          <div id="randomStatus" class="status">等待生成 Random 谱面...</div>
+        </div>
+        <div class="action-row">
+          <button id="btn-generate-random" class="btn">重新生成</button>
+          <button id="btn-start-random" class="btn secondary" disabled>开始（写入后启动）</button>
+        </div>
+        <div class="preview" style="margin-top:12px;">
+          <div class="preview-meta">生成后将展示 chart_analysis 的分析图。</div>
+          <div id="randomPreview" class="preview-images"></div>
+          <pre id="randomData" class="summary-box">等待生成 Random 分析数据</pre>
+        </div>
+      </div>
+
+      <div id="modeBar" class="mode-bar hidden">
+        <button id="btn-mode-random" class="btn secondary">随机模式</button>
+        <button id="btn-mode-normal" class="btn">普通模式</button>
+      </div>
+    </div>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
