@@ -11,6 +11,8 @@ const state = {
 
 const BASE_PATH = detectBasePath();
 const PROTOCOL_URL = `${BASE_PATH}chart_analysis/outputs/protocol.json`;
+const ANALYSIS_ENDPOINT = `${BASE_PATH}chart_analysis/run`;
+let chartAnalysisPromise = null;
 
 // 模拟数据：仅用于 UI 占位，实际应从 chart_analysis 拉取（排除 Random 目录）。
 const MOCK_CHARTS = [
@@ -84,9 +86,11 @@ function switchMode(mode) {
 
 async function runAnalysisAndLoadCharts() {
   if (els.normalStatus) els.normalStatus.textContent = "调用 chart_analysis 解析所有谱面...";
+  console.log("[frontend] normal mode -> trigger chart_analysis");
   try {
     await triggerAnalysisForAllCharts();
     await loadCharts();
+    if (els.normalStatus) els.normalStatus.textContent = "解析完成，正在加载谱面...";
   } catch (err) {
     console.error(err);
     if (els.normalStatus) els.normalStatus.textContent = "解析或加载失败，请检查后台服务。";
@@ -123,7 +127,7 @@ async function fetchChartsFromBackend() {
       folder: c.folder || `charts/${c.name}`,
       analysisImages: (c.files || []).map((f) => `${BASE_PATH}chart_analysis/outputs/${f}`),
       analysisSummary: c.summary ? `${BASE_PATH}chart_analysis/outputs/${c.summary}` : null,
-      audio: c.audio ? `${BASE_PATH}${c.audio}` : `${BASE_PATH}${c.folder || `charts/${c.name}`}/${c.name}.mp3`,
+      audio: normalizeAudioPath(c),
     }));
   } catch (err) {
     console.warn("protocol load failed, fallback to mock", err);
@@ -137,8 +141,46 @@ async function fetchChartsFromBackend() {
 }
 
 function triggerAnalysisForAllCharts() {
-  // 占位：实际应调用 chart_analysis 的“解析全部谱面”接口。
-  return Promise.resolve();
+  return triggerChartAnalysisRun();
+}
+
+function triggerChartAnalysisRun() {
+  if (chartAnalysisPromise) {
+    return chartAnalysisPromise;
+  }
+  if (els.normalStatus) {
+    els.normalStatus.textContent = "请求 chart_analysis 运行...";
+  }
+  console.log("[frontend] POST", ANALYSIS_ENDPOINT);
+  chartAnalysisPromise = (async () => {
+    try {
+      const res = await fetch(ANALYSIS_ENDPOINT, { method: "POST" });
+      if (!res.ok) {
+        throw new Error(`chart_analysis run failed: ${res.status}`);
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.success !== true) {
+        throw new Error(data.message || "chart_analysis 返回失败");
+      }
+      console.log("[frontend] chart_analysis success", data.message || "");
+      if (els.normalStatus) {
+        els.normalStatus.textContent = "chart_analysis 完成，准备加载协议文件...";
+      }
+      return true;
+    } catch (err) {
+      console.warn("chart_analysis request failed", err);
+      if (els.normalStatus) {
+        els.normalStatus.textContent = "chart_analysis 调用失败，请检查后台服务。";
+      }
+      if (els.toast) {
+        showToast("chart_analysis 调用失败，请查看后台日志");
+      }
+      throw err;
+    } finally {
+      chartAnalysisPromise = null;
+    }
+  })();
+  return chartAnalysisPromise;
 }
 
 function renderTrackList(charts) {
@@ -217,6 +259,28 @@ function formatSummary(data) {
   if (data.note_types) lines.push(`音符类型: ${JSON.stringify(data.note_types)}`);
   if (lines.length === 0) lines.push(JSON.stringify(data, null, 2));
   return lines.join("\n");
+}
+
+function normalizeAudioPath(c) {
+  let folderPath = c.folder || `charts/${c.name}`;
+  if (!folderPath.startsWith("charts/") && !folderPath.startsWith("/charts/")) {
+    folderPath = `charts/${folderPath.replace(/^\/+/, "")}`;
+  } else {
+    folderPath = folderPath.replace(/^\/+/, "");
+  }
+  let audioRel = c.audio;
+  if (!audioRel) {
+    audioRel = `${folderPath}/${c.name}.mp3`;
+  } else if (!audioRel.includes("/")) {
+    // 如果协议里只有文件名，自动补上目录
+    audioRel = `${folderPath}/${audioRel}`;
+  } else if (audioRel.startsWith("./")) {
+    audioRel = `${folderPath}/${audioRel.replace(/^\.\//, "")}`;
+  }
+  if (audioRel.startsWith("http://") || audioRel.startsWith("https://")) {
+    return audioRel;
+  }
+  return `${BASE_PATH}${audioRel.replace(/^\/+/, "")}`;
 }
 
 function selectChart(chart, cardEl) {
@@ -363,7 +427,8 @@ function detectBasePath() {
   if (loc.origin && loc.origin !== "null") {
     return `${loc.origin}${base}`;
   }
-  return `file://${base}`;
+  // 如果是 file:// 直接打开，退回本地服务默认端口，保证请求能打到后端
+  return "http://127.0.0.1:8000/";
 }
 
 function playPreviewAudio(chart) {
